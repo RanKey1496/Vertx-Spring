@@ -2,6 +2,8 @@ package com.nomiente.configuration;
 
 import java.net.Inet4Address;
 import java.net.UnknownHostException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -35,21 +37,24 @@ public class VertxConfiguration {
 	}
 	
 	@PostConstruct
-	public void init() throws UnknownHostException {
+	public void init() throws UnknownHostException, InterruptedException, ExecutionException {
 		VertxOptions options = new VertxOptions();
 		options.setMaxEventLoopExecuteTime(Long.MAX_VALUE);
 		options.setClustered(true);
 		options.setClusterManager(new HazelcastClusterManager(hazelcastInstance));
 		options.setClusterHost(Inet4Address.getLocalHost().getHostAddress());
-		
+		CompletableFuture<Vertx> fut = new CompletableFuture<>();
 		Vertx.clusteredVertx(options, ar -> {
 			if (ar.succeeded()) {
 				log.debug("Vertx instance created");
-				this.vertx = ar.result();
+				fut.complete(ar.result());
 			} else {
-				ar.cause().printStackTrace();
+				log.error("Error :" + ar.cause());
+				fut.completeExceptionally(ar.cause());
 			}
 		});
+		
+		vertx = fut.get();
 	}
 	
 	@PreDestroy
